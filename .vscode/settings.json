@@ -4,5 +4,10 @@
         "*.wxss": "css",
         "*.wxs": "javascript",
         "winsock2.h": "c"
-    }
+    },
+    "cSpell.words": [
+        "ANCOUNT",
+        "ptrdname",
+        "QCLASS"
+    ]
 }
