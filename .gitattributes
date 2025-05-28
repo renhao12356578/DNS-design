@@ -1,4 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 #忽略掉old文件夹
-old/* text=auto
+build/* text=auto

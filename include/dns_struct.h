@@ -97,6 +97,8 @@ typedef struct dns_question{
       uint16_t QTYPE:16; //指定查询的资源记录类型-->宏定义部分
 
       uint16_t QCLASS:16; //指定查询的类别。对于互联网应用，通常为 1 (IN)。
+
+      struct dns_question* next; //指向下一个问题的指针，用于形成链表结构
 }dns_question;
 
 // RData 定义了DNS资源记录中资源数据(RDATA)部分的联合体结构
@@ -161,21 +163,21 @@ typedef struct dns_RR {
 
     char* name;                 // 资源记录关联的域名 (可变长度，可压缩)
     uint16_t type;              // 资源记录的类型码 (例如, 1 for A, 28 for AAAA)
-    uint16_t rr_class;          // 资源记录的类别码 (通常为 1, 代表 IN for Internet)
+    uint16_t rrClass;          // 资源记录的类别码 (通常为 1, 代表 IN for Internet)
     uint32_t ttl;               // 生存时间 (Time To Live)，单位为秒，表示该记录可被缓存的时间
-    uint16_t rdlength;          // RDATA 字段的长度（单位：字节）
+    uint16_t rdLength;          // RDATA 字段的长度（单位：字节）
 
     // --- Data Part (实际数据部分) ---
     union RData rdata;          // 资源数据，其具体结构由 'type' 字段决定
     struct dns_RR* next;   // 指向下一个资源记录的指针，用于形成链表结构
-} dns_RR;
+} dns_rr;
 
 
 // DNS 报文结构体
 typedef struct dns_message {
     dns_header* header;
     dns_question* question;
-    dns_RR* answer;
-    dns_RR* authority;
-    dns_RR* additional;
+    dns_rr* answer;
+    dns_rr* authority;
+    dns_rr* additional;
 } dns_Message;

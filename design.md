@@ -91,7 +91,8 @@
     int dns_build_error_response(const struct dns_message *request, int rcode, unsigned char *buffer, size_t *len);
     // ... free dns_message resources
     ```
-6.  `local_table.h`, `local_table.c`: 加载和查询对照表。可以使用哈希表实现高效查找。
+6.  `local_table.h`, `local_table.c`: 
+加载和查询对照表。可以使用哈希表实现高效查找。
     ```c
     // local_table.h
     typedef enum { ACTION_RELAY, ACTION_LOCAL_SERVE, ACTION_BLOCK } lookup_action_t;

@@ -31,21 +31,21 @@ const char* type_to_string(uint16_t type) {
  * @brief 打印单个资源记录 (RR)。
  * @param rr 指向要打印的 dns_RR 结构体的指针。
  */
-void printRR(const dns_RR* rr) {
+void printRR(const dns_rr* rr) {
     if (!rr) return;
 
     // 打印通用的RR头部信息
-    printf("  Name: %s, TTL: %u, Class: %s, Type: %s, Data Length: %u\n",
+    printf("Name (domin): %s, TTL: %u, Class: %s, Type: %s, Data Length: %u\n",
         rr->name,
         rr->ttl,
-        (rr->rr_class == DNS_CLASS_IN) ? "IN" : "Unknown",
+        (rr->rrClass == DNS_CLASS_IN) ? "IN" : "Unknown",
         type_to_string(rr->type),
-        rr->rdlength);
+        rr->rdLength);
 
     // 打印特定类型的RDATA
-    printf("    RDATA: ");
+    printf("RDATA: ");
     switch (rr->type) {
-        case DNS_TYPE_A: {
+        case DNS_TYPE_A: {   //ipv4
             char ip_str[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, rr->rdata.A_record.address, ip_str, INET_ADDRSTRLEN);
             printf("Address: %s\n", ip_str);
@@ -139,14 +139,13 @@ void printHeader(dns_Message* msg) {
 
     // Flags
     printf("Flags: \n");
-    printf("QR=%d (Response),\n ", h->QR);
+    printf("QR=%d (Response),\n", h->QR);
     printf("Opcode=%d,\n", h->Opcode);
-    printf("AA = %d,\n ", h->AA);
-    printf("TC = %d, \n", h->TC);
-    printf("RD = %d, \n", h->RD);
+    printf("AA = %d,\n", h->AA);
+    printf("TC = %d,\n", h->TC);
+    printf("RD = %d,\n", h->RD);
     printf("RA = %d\n", h->RA);
-    printf("RCODE = %d(%s),\n ", h->Z);
-    printf("rcode = %d\n", h->RCODE,(h->RCODE == DNS_RCODE_OK) ? "No error" : "Error");
+    printf("rcode = %d (%s)\n", h->RCODE,(h->RCODE == DNS_RCODE_OK) ? "No error" : "Error");
 
 
     // Counts
@@ -180,11 +179,11 @@ void printQuestion(dns_Message* msg) {
  * @param msg 指向包含已解析报文的dns_Message结构体。
  */
 void printAnswer(dns_Message* msg) {
-    if (!msg || !msg->answer) {
+    if (!msg || !msg->answer||msg->header->ANCOUNT == 0) {
         printf("Answer section is empty or NULL.\n\n");
         return;
     }
-    dns_RR* rr = msg->answer;
+    dns_rr* rr = msg->answer;
     printf("-------------------------DNS Answer Section-------------------------\n");
     int count = 1;
     while (rr) {
@@ -193,76 +192,4 @@ void printAnswer(dns_Message* msg) {
         rr = rr->next;
     }
     printf("--------------------------------------------------------------------\n\n");
-}
-
-
-// --- Demo Main Function ---
-// 编译和运行时，此部分会展示上述函数的用法。
-int main() {
-    printf("--- DNS Message Print Demo ---\n\n");
-    
-    // 1. 创建并填充模拟的DNS报文结构
-    // (在实际应用中，这些结构体是通过解析网络字节流填充的)
-    
-    // Header
-    dns_header h = {0};
-    h.ID = 0x1234;
-    h.QRL = DNS_QR_ANSWER;
-    h.Opcode = DNS_OPCODE_QUERY;
-    h.AA = 0;
-    h.TC = 0;
-    h.RD = 1;
-    h.RA = 1;
-    h.Z = 0;
-    h.RCODE = DNS_RCODE_OK;
-    h.QDCOUNT = 1;
-    h.ANCOUNT = 1;
-    h.NSCOUNT = 0;
-    h.ARCOUNT = 0;
-
-    // Question
-    dns_question q = {0};
-    q.QNAME = "www.google.com";
-    q.QTYPE = DNS_TYPE_A;
-    q.QCLASS = DNS_CLASS_IN;
-    
-    // Answer RR (单个A记录)
-    dns_RR ans_rr = {0};
-    ans_rr.name = "www.google.com";
-    ans_rr.type = DNS_TYPE_A;
-    ans_rr.rr_class = DNS_CLASS_IN;
-    ans_rr.ttl = 180; // 3 minutes
-    ans_rr.rdlength = 4;
-    // Google's IP 142.250.184.132
-    ans_rr.rdata.A_record.address[0] = 142;
-    ans_rr.rdata.A_record.address[1] = 250;
-    ans_rr.rdata.A_record.address[2] = 184;
-    ans_rr.rdata.A_record.address[3] = 132;
-    ans_rr.next = NULL; // 只有一个回答记录
-
-    // Top-level message struct
-    dns_Message msg = {0};
-    msg.header = &h;
-    msg.question = &q;
-    msg.answer = &ans_rr;
-    msg.authority = NULL;
-    msg.additional = NULL;
-    
-    // 2. 调用打印函数
-    printHeader(&msg);
-    printQuestion(&msg);
-    printAnswer(&msg);
-
-    // 3. 演示原始字节流打印
-    char example_stream[] = {
-        0x12, 0x34, // ID
-        0x81, 0x80, // Flags
-        0x00, 0x01, // QDCOUNT
-        0x00, 0x01, // ANCOUNT
-        0x00, 0x00, // NSCOUNT
-        0x00, 0x00  // ARCOUNT
-    };
-    printDnstring(example_stream, sizeof(example_stream));
-    
-    return 0;
 }

@@ -1,0 +1,7 @@
+R:/SCS NETWORK DESIGN/design demo/build/CMakeFiles/dns_relay.dir
+R:/SCS NETWORK DESIGN/design demo/build/CMakeFiles/edit_cache.dir
+R:/SCS NETWORK DESIGN/design demo/build/CMakeFiles/rebuild_cache.dir
+R:/SCS NETWORK DESIGN/design demo/build/CMakeFiles/list_install_components.dir
+R:/SCS NETWORK DESIGN/design demo/build/CMakeFiles/install.dir
+R:/SCS NETWORK DESIGN/design demo/build/CMakeFiles/install/local.dir
+R:/SCS NETWORK DESIGN/design demo/build/CMakeFiles/install/strip.dir
