@@ -6,7 +6,7 @@
 #include"dns_convert.h"
 #include"dns_struct.h"
 
-int socketMode;           // 阻塞/非阻塞模式
+u_long socketMode;           // 阻塞/非阻塞模式
 int clientSocket;         // 接管主机DNS请求的socket
 int serverSocket;         // 转发请求给远程DNS服务器的socket
 struct sockaddr_in clientAddress;

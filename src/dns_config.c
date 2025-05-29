@@ -15,7 +15,7 @@ char* LOG_PATH = NULL;
 char* dnsServerAddress = NULL;
 int debug_mode = 0;    // 默认不开启调试模式
 int log_mode = 0;      // 默认不开启日志记录
-int socketMode = 0;    // 默认非阻塞模式
+u_long socketMode = 0;    // 默认非阻塞模式
 int islisten = 0;      // 起始不监听
 
 char IPAddr[DNS_RR_NAME_MAX_SIZE];

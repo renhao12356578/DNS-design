@@ -228,9 +228,37 @@ void receiveServer() {
                     printf("Forwarded response with original ID: %d\n\n", originalID);
                 }
 
-                if (log_mode == 1) {
-                    writeLog(msg.question->QNAME, NULL);
+                // 处理从远程DNS服务器返回的IP地址记录
+                if (log_mode == 1 || debug_mode == 1) {
+                    uint8_t resolved_ip[4] = {0};
+                    
+                    // 从回答部分提取IP地址
+                    if (msg.answer && msg.answer->type == DNS_TYPE_A && msg.answer->rdLength == 4) {
+                        memcpy(resolved_ip, msg.answer->rdata.A_record.address, 4);
+                        
+                        // 将IP地址添加到缓存中
+                        if (msg.question && msg.question->QNAME) {
+                            cachePut(resolved_ip, msg.question->QNAME);
+                            if (debug_mode == 1) {
+                                printf("Added to cache: %s -> %d.%d.%d.%d\n", 
+                                       msg.question->QNAME, 
+                                       resolved_ip[0], resolved_ip[1], resolved_ip[2], resolved_ip[3]);
+                            }
+                        }
+                        
+                        // 记录到日志中，使用实际的IP地址
+                        if (log_mode == 1) {
+                            writeLog(msg.question->QNAME, resolved_ip);
+                        }
+                    } else {
+                        // 如果没有找到A记录或格式不正确，记录为未找到
+                        if (log_mode == 1) {
+                            writeLog(msg.question->QNAME, NULL);
+                        }
+                    }
                 }
+                
+
             } else {
                 if (debug_mode == 1) {
                     printf("Warning: Invalid or expired ID mapping: %d\n\n", receivedID);

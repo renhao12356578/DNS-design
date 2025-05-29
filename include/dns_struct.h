@@ -76,8 +76,8 @@ typedef struct dns_header
      uint16_t TC:1;//截断 (Truncation)：置1表示响应因超过UDP报文512字节的限制而被截断。客户端应转用TCP重试。
      uint16_t RD:1;//期望递归 (Recursion Desired)：由客户端设置，置1表示期望服务器进行递归查询。
      uint16_t RA:1;//递归可用 (Recursion Available)：由服务器在响应中设置，置1表示该服务器支持递归查询。
-     uint16_t Z:1;//保留字段：必须为0。
-     uint16_t RCODE:1;//响应码 (Response Code)：0表示无错误；1表示格式错误；2表示服务器故障；3表示域名不存在（NXDOMAIN）。
+     uint16_t Z:3;//保留字段：必须为0。
+     uint16_t RCODE:4;//响应码 (Response Code)：0表示无错误；1表示格式错误；2表示服务器故障；3表示域名不存在（NXDOMAIN）。
      
      //计数字段
      uint16_t QDCOUNT;//问题数量  "问题"部分中包含的查询记录数量，通常为1。

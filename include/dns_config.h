@@ -7,7 +7,7 @@
 // 调试和日志模式
 extern int debug_mode;
 extern int log_mode;
-extern int socketMode;
+extern u_long socketMode;
 extern int islisten;
 
 // 路径配置
