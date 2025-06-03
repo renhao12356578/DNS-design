@@ -7,8 +7,7 @@
 #include"dns_struct.h"
 
 u_long socketMode;           // 阻塞/非阻塞模式
-int clientSocket;         // 接管主机DNS请求的socket
-int serverSocket;         // 转发请求给远程DNS服务器的socket
+int dnsSocket;               // 统一的DNS socket
 struct sockaddr_in clientAddress;
 struct sockaddr_in serverAddress;
 int addressLength;
@@ -22,6 +21,8 @@ void initSocket();
 void closeSocketServer();
 void setNonBlockingMode();
 void setBlockingMode();
-void receiveClient();
-void receiveServer();
+void receiveData();           // 合并后的数据接收函数
+int isFromDnsServer(struct sockaddr_in* addr);   // 判断是否来自DNS服务器
+void handleClientRequest(uint8_t* buffer, int msg_size, struct sockaddr_in* clientAddr);  // 处理客户端请求
+void handleServerResponse(uint8_t* buffer, int msg_size);  // 处理服务器响应
 
