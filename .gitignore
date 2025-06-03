@@ -1,8 +1,10 @@
 # Ignore build artifacts
-build/*
-.vs/*
-.vscode/*
 .vs/ProjectSettings.json
-.gitignore
 /.vs
 /build
+/bin
+/obj
+/node_modules
+/dist
+/coverage
+/logs

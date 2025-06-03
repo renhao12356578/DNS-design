@@ -1,3 +1,0 @@
-"F:\visual stdio\ccplace\Common7\IDE\CommonExtensions\Microsoft\CMake\CMake\bin\cmake.exe" -E rm -f CMakeFiles\dns_relay.dir/objects.a
-F:\MinGW\gytx_x86_64-12.1.0-posix-seh\mingw64\bin\ar.exe qc CMakeFiles\dns_relay.dir/objects.a @CMakeFiles\dns_relay.dir\objects1.rsp
-F:\MinGW\gytx_x86_64-12.1.0-posix-seh\mingw64\bin\gcc.exe -g -Wl,--whole-archive CMakeFiles\dns_relay.dir/objects.a -Wl,--no-whole-archive -o dns_relay.exe -Wl,--out-implib,libdns_relay.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles\dns_relay.dir\linkLibs.rsp
