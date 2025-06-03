@@ -133,7 +133,7 @@ void receiveClient() {
     uint8_t buffer[BUFFER_SIZE];      // 接收的报文
     uint8_t buffer_new[BUFFER_SIZE];  // 回复给客户端的报文
     dns_Message msg;                  // 报文结构体
-    uint8_t ip_addr[4] = { 0 };         // 查询域名得到的IP地址
+    uint8_t ip_addr[4] = { 0 };       // 查询域名得到的IP地址
     int msg_size = -1;                // 报文大小
     int is_found = 0;                 // 是否查到
 

@@ -23,6 +23,17 @@ char domain[DNS_RR_NAME_MAX_SIZE];
 
 // 打印帮助信息
 void printHelpInfo() {
+    printf(" ▄▄▄▄▄▄▄▄▄▄   ▄▄        ▄  ▄▄▄▄▄▄▄▄▄▄▄       ▄▄▄▄▄▄▄▄▄▄▄  ▄▄▄▄▄▄▄▄▄▄▄  ▄            ▄▄▄▄▄▄▄▄▄▄▄  ▄         ▄ \n");
+    printf("▐░░░░░░░░░░▌ ▐░░▌      ▐░▌▐░░░░░░░░░░░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░▌       ▐░▌\n");
+    printf("▐░█▀▀▀▀▀▀▀█░▌▐░▌░▌     ▐░▌▐░█▀▀▀▀▀▀▀▀▀      ▐░█▀▀▀▀▀▀▀█░▌▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌▐░▌       ▐░▌\n");
+    printf("▐░▌       ▐░▌▐░▌▐░▌    ▐░▌▐░▌               ▐░▌       ▐░▌▐░▌          ▐░▌          ▐░▌       ▐░▌▐░▌       ▐░▌\n");
+    printf("▐░▌       ▐░▌▐░▌ ▐░▌   ▐░▌▐░█▄▄▄▄▄▄▄▄▄      ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄▄▄ ▐░▌          ▐░█▄▄▄▄▄▄▄█░▌▐░█▄▄▄▄▄▄▄█░▌\n");
+    printf("▐░▌       ▐░▌▐░▌  ▐░▌  ▐░▌▐░░░░░░░░░░░▌     ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌          ▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌\n");
+    printf("▐░▌       ▐░▌▐░▌   ▐░▌ ▐░▌ ▀▀▀▀▀▀▀▀▀█░▌     ▐░█▀▀▀▀█░█▀▀ ▐░█▀▀▀▀▀▀▀▀▀ ▐░▌          ▐░█▀▀▀▀▀▀▀█░▌ ▀▀▀▀█░█▀▀▀▀ \n");
+    printf("▐░▌       ▐░▌▐░▌    ▐░▌▐░▌          ▐░▌     ▐░▌     ▐░▌  ▐░▌          ▐░▌          ▐░▌       ▐░▌     ▐░▌     \n");
+    printf("▐░█▄▄▄▄▄▄▄█░▌▐░▌     ▐░▐░▌ ▄▄▄▄▄▄▄▄▄█░▌     ▐░▌      ▐░▌ ▐░█▄▄▄▄▄▄▄▄▄ ▐░█▄▄▄▄▄▄▄▄▄ ▐░▌       ▐░▌     ▐░▌     \n");
+    printf("▐░░░░░░░░░░▌ ▐░▌      ▐░░▌▐░░░░░░░░░░░▌     ▐░▌       ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░▌     \n");
+    printf(" ▀▀▀▀▀▀▀▀▀▀   ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀▀       ▀         ▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀       ▀      \n");
     printf("+------------------------------------------------------------------------------+\n");
     printf("|                             Welcome to use our DNS relay system!             |\n");
     printf("|                                                                              |\n");
@@ -53,15 +64,14 @@ void configInit(int argc, char* argv[]) {
     getConfig(argc, argv);
 
     // 打印调试信息
-    if (debug_mode) {
-        printf("配置初始化完成:\n");
-        printf("  - Hosts path: %s\n", host_path);
-        printf("  - Log path: %s\n", LOG_PATH);
-        printf("  - DNS server: %s\n", dnsServerAddress);
-        printf("  - Socket mode: %s\n", socketMode == 0 ? "非阻塞" : "阻塞");
-        printf("  - Debug mode: %s\n", debug_mode ? "开启" : "关闭");
-        printf("  - Log mode: %s\n", log_mode ? "开启" : "关闭");
-    }
+    printf("配置初始化完成:\n");
+    set_log_level(argv[1]);
+    printf("  - Hosts path: %s\n", host_path);
+    printf("  - Log path: %s\n", LOG_PATH);
+    printf("  - DNS server: %s\n", dnsServerAddress);
+    printf("  - Socket mode: %s\n", socketMode == 0 ? "非阻塞" : "阻塞");
+    printf("  - Debug mode: %s\n", debug_mode ? "开启" : "关闭");
+    printf("  - Log mode: %s\n", log_mode ? "开启" : "关闭");
 
     // 初始化各子系统
     initSocket();
@@ -106,7 +116,7 @@ void getConfig(int argc, char* argv[]) {
             free(dnsServerAddress);
             dnsServerAddress = strdup(argv[++index]);
             if (!dnsServerAddress) {
-                fprintf(stderr, "内存分配失败\n");
+                fprintf(stderr, "远程DNS服务器地址内存分配失败\n");
                 exit(EXIT_FAILURE);
             }
         }

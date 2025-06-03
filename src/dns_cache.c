@@ -54,7 +54,7 @@ static void _removeFromHashTable(const char* domain) {
     hashNode* current = g_hash_table[index];
     hashNode* prev = NULL;
     while(current) {
-        if (strcmp(current->domain, domain) == 0) {
+        if (strcmp(current->lru_node_ptr->domain, domain) == 0) {
             if (prev) {
                 prev->next = current->next;
             } else {
@@ -91,7 +91,7 @@ int cacheGet(uint8_t *ipv4, char* domain) {
     hashNode* hash_node = g_hash_table[index];
 
     while(hash_node) {
-        if (strcmp(hash_node->domain, domain) == 0) { // 命中
+        if (strcmp(hash_node->lru_node_ptr->domain, domain) == 0) { // 命中
             lruNode* lru_node = hash_node->lru_node_ptr;
             memcpy(ipv4, lru_node->IP, 4);
 
@@ -119,7 +119,7 @@ void cachePut(uint8_t ipv4[4], char* domain)
 
     // 1. 检查域名是否已存在于缓存中
     while(hash_node) {
-        if (strcmp(hash_node->domain, domain) == 0) {
+        if (strcmp(hash_node->lru_node_ptr->domain, domain) == 0) {
             // 已存在：更新IP值，并移动到链表头部
             lruNode* lru_node = hash_node->lru_node_ptr;
             memcpy(lru_node->IP, ipv4, 4);
@@ -153,8 +153,6 @@ void cachePut(uint8_t ipv4[4], char* domain)
 
     // 插入到哈希表
     hashNode* new_hash_node = (hashNode*)malloc(sizeof(hashNode));
-    strncpy(new_hash_node->domain, domain, MAX_DOMAIN_LEN - 1);
-    new_hash_node->domain[MAX_DOMAIN_LEN - 1] = '\0';
     new_hash_node->lru_node_ptr = new_lru_node;
     new_hash_node->next = g_hash_table[index]; // 插入到哈希桶链表的头部
     g_hash_table[index] = new_hash_node;
