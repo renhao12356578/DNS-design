@@ -1,8 +1,5 @@
 # Ignore build artifacts
-build/*
-.vs/*
-.vscode/*
-.vs/ProjectSettings.json
-.gitignore
-/.vs
 /build
+/.vs
+/.vscode
+CMakeLists.txt

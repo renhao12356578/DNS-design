@@ -87,7 +87,7 @@ void cacheInit() {
 int cacheGet(uint8_t *ipv4, char* domain) {
     if (!g_hash_table) return 0; // 未初始化
 
-    unsigned long index = hashFunction(domain) %HASH_TABLE_SIZE;
+    unsigned long index = hashFunction(domain) % HASH_TABLE_SIZE;
     hashNode* hash_node = g_hash_table[index];
 
     while(hash_node) {
