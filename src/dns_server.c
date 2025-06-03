@@ -78,8 +78,22 @@ void setNonBlockingMode()
     }
 
     // 在非阻塞模式下，循环接收数据
+    time_t last_cleanup = time(NULL);
+    const int CLEANUP_INTERVAL = 60; // 每60秒清理一次过期缓存
+    
     while (1) {
         receiveData();  // 统一的数据接收函数
+        
+        // 定期清理过期缓存
+        time_t current_time = time(NULL);
+        if (current_time - last_cleanup >= CLEANUP_INTERVAL) {
+            int expired_count = cacheCleanExpired();
+            if (debug_mode == 1 && expired_count > 0) {
+                printf("Cache cleanup: removed %d expired entries\n", expired_count);
+            }
+            last_cleanup = current_time;
+        }
+        
         Sleep(1);
     }
 }
@@ -92,10 +106,13 @@ void setBlockingMode()
     fds[0].fd = dnsSocket;          // 设置需要监听的套接字
     fds[0].events = POLLIN;         // 指定监听的事件类型为 "可读"
 
+    time_t last_cleanup = time(NULL);
+    const int CLEANUP_INTERVAL = 60; // 每60秒清理一次过期缓存
+
     // 循环等待直到有事件发生
     while (1) {
-        //调用 WSAPoll 等待 socket 上的事件。-1 参数表示无限等待，直到有事件发生。
-        int ret = WSAPoll(fds, 1, -1);
+        //调用 WSAPoll 等待 socket 上的事件。timeout设为1000ms（1秒）以支持定期清理
+        int ret = WSAPoll(fds, 1, 1000);
         if (ret == SOCKET_ERROR) {
             fprintf(stderr, "WSAPoll failed: %d\n", WSAGetLastError());
             closesocket(dnsSocket);
@@ -105,6 +122,16 @@ void setBlockingMode()
             if (fds[0].revents & POLLIN) {
                 receiveData(); // 处理数据接收
             }
+        }
+        
+        // 定期清理过期缓存（无论是否有网络事件）
+        time_t current_time = time(NULL);
+        if (current_time - last_cleanup >= CLEANUP_INTERVAL) {
+            int expired_count = cacheCleanExpired();
+            if (debug_mode == 1 && expired_count > 0) {
+                printf("Cache cleanup: removed %d expired entries\n", expired_count);
+            }
+            last_cleanup = current_time;
         }
     }
 }
@@ -244,13 +271,15 @@ void handleServerResponse(uint8_t* buffer, int msg_size) {
                 if (msg.answer && msg.answer->type == DNS_TYPE_A && msg.answer->rdLength == 4) {
                     memcpy(resolved_ip, msg.answer->rdata.A_record.address, 4);
                     
-                    // 将IP地址添加到缓存中
+                    // 将IP地址和TTL添加到缓存中
                     if (msg.question && msg.question->QNAME) {
-                        cachePut(resolved_ip, msg.question->QNAME);
+                        uint32_t ttl = msg.answer->ttl; // TTL已经在readBits中转换为主机字节序
+                        cachePut(resolved_ip, msg.question->QNAME, ttl);
                         if (debug_mode == 1) {
-                            printf("Added to cache: %s -> %d.%d.%d.%d\n", 
+                            printf("Added to cache: %s -> %d.%d.%d.%d (TTL: %u seconds)\n", 
                                    msg.question->QNAME, 
-                                   resolved_ip[0], resolved_ip[1], resolved_ip[2], resolved_ip[3]);
+                                   resolved_ip[0], resolved_ip[1], resolved_ip[2], resolved_ip[3],
+                                   ttl);
                         }
                     }
                     

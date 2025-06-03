@@ -23,6 +23,7 @@ set(SOURCES
     src/dns_resetid.c
     src/dns_table.c
     src/dns_cache.c
+    src/output_level.c
 )
 
 # 创建可执行文件

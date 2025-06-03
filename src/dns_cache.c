@@ -1,4 +1,6 @@
 #include "dns_cache.h"
+#include "uthash.h"
+
 // --- 静态全局变量，用于存储缓存状态 ---
 
 static int g_size;         // 当前缓存中的条目数
@@ -10,14 +12,19 @@ static hashNode **g_hash_table; // 哈希表本体
 
 // --- 内部辅助函数 ---
 
-// 简单的字符串哈希函数 (djb2)
+// 使用uthash提供的高质量哈希函数
+// 默认使用Jenkins hash (HASH_JEN)，这是性能和分布都很好的哈希函数
 static unsigned long hashFunction(const char *str) {
-    unsigned long hash = 5381;
-    int c;
-    while ((c = *str++)) {
-        hash = ((hash << 5) + hash) + c; // hash * 33 + c
-    }
-    return hash;
+    unsigned hashv;
+    HASH_JEN(str, strlen(str), hashv);
+    return hashv;
+}
+
+// 检查指定的缓存节点是否已过期
+int isExpired(lruNode* node) {
+    if (!node) return 1;
+    time_t current_time = time(NULL);
+    return (current_time - node->insert_time) >= node->ttl;
 }
 
 // 将节点从双向链表中解开
@@ -83,16 +90,30 @@ void cacheInit() {
     printf("LRU Cache initialized with capacity %d.\n", g_capacity);
 }
 
-// 查询操作
+// 查询操作 - 现在包含TTL检查
 int cacheGet(uint8_t *ipv4, char* domain) {
     if (!g_hash_table) return 0; // 未初始化
 
-    unsigned long index = hashFunction(domain) %HASH_TABLE_SIZE;
+    unsigned long index = hashFunction(domain) % HASH_TABLE_SIZE;
     hashNode* hash_node = g_hash_table[index];
 
     while(hash_node) {
         if (strcmp(hash_node->lru_node_ptr->domain, domain) == 0) { // 命中
             lruNode* lru_node = hash_node->lru_node_ptr;
+            
+            // 检查TTL是否过期
+            if (isExpired(lru_node)) {
+                // TTL已过期，从缓存中删除该条目
+                printf("Cache entry for domain '%s' has expired (TTL: %u seconds)\n", 
+                       domain, lru_node->ttl);
+                _removeFromHashTable(domain);
+                _unlinkNode(lru_node);
+                free(lru_node);
+                g_size--;
+                return 0; // 返回0表示未命中（已过期）
+            }
+            
+            // TTL未过期，返回数据
             memcpy(ipv4, lru_node->IP, 4);
 
             // LRU核心：将命中节点移动到链表头部
@@ -101,6 +122,8 @@ int cacheGet(uint8_t *ipv4, char* domain) {
                 _addNodeToFront(lru_node);
             }
             
+            printf("Cache hit for domain '%s' (TTL remaining: %ld seconds)\n", 
+                   domain, lru_node->ttl - (time(NULL) - lru_node->insert_time));
             return 1; // 返回1表示命中
         }
         hash_node = hash_node->next;
@@ -109,24 +132,27 @@ int cacheGet(uint8_t *ipv4, char* domain) {
     return 0; // 返回0表示未命中
 }
 
-// 插入操作
-void cachePut(uint8_t ipv4[4], char* domain)
+// 插入操作 - 现在包含TTL参数
+void cachePut(uint8_t ipv4[4], char* domain, uint32_t ttl)
 {
     if (!g_hash_table) return; // 未初始化
 	
-    unsigned long index = hashFunction(domain) %HASH_TABLE_SIZE;
+    unsigned long index = hashFunction(domain) % HASH_TABLE_SIZE;
     hashNode* hash_node = g_hash_table[index];
 
     // 1. 检查域名是否已存在于缓存中
     while(hash_node) {
         if (strcmp(hash_node->lru_node_ptr->domain, domain) == 0) {
-            // 已存在：更新IP值，并移动到链表头部
+            // 已存在：更新IP值、TTL和时间戳，并移动到链表头部
             lruNode* lru_node = hash_node->lru_node_ptr;
             memcpy(lru_node->IP, ipv4, 4);
+            lru_node->ttl = ttl;
+            lru_node->insert_time = time(NULL);
             if (lru_node != g_head) {
                 _unlinkNode(lru_node);
                 _addNodeToFront(lru_node);
             }
+            printf("Updated cache entry for domain '%s' with TTL %u seconds\n", domain, ttl);
             return;
         }
         hash_node = hash_node->next;
@@ -147,6 +173,8 @@ void cachePut(uint8_t ipv4[4], char* domain)
     strncpy(new_lru_node->domain, domain, MAX_DOMAIN_LEN -1);
     new_lru_node->domain[MAX_DOMAIN_LEN - 1] = '\0';
     memcpy(new_lru_node->IP, ipv4, 4);
+    new_lru_node->ttl = ttl;
+    new_lru_node->insert_time = time(NULL);
 
     // 插入到链表头部
     _addNodeToFront(new_lru_node);
@@ -158,4 +186,34 @@ void cachePut(uint8_t ipv4[4], char* domain)
     g_hash_table[index] = new_hash_node;
 
     g_size++;
+    printf("Added new cache entry for domain '%s' with TTL %u seconds\n", domain, ttl);
+}
+
+// 检查并清理所有过期的缓存条目
+int cacheCleanExpired() {
+    if (!g_hash_table) return 0;
+    
+    int expired_count = 0;
+    lruNode* current = g_head;
+    
+    while (current) {
+        lruNode* next = current->next; // 保存下一个节点，因为当前节点可能被删除
+        
+        if (isExpired(current)) {
+            printf("Cleaning expired cache entry for domain '%s'\n", current->domain);
+            _removeFromHashTable(current->domain);
+            _unlinkNode(current);
+            free(current);
+            g_size--;
+            expired_count++;
+        }
+        
+        current = next;
+    }
+    
+    if (expired_count > 0) {
+        printf("Cleaned %d expired cache entries\n", expired_count);
+    }
+    
+    return expired_count;
 }
