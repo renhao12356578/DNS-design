@@ -2,4 +2,10 @@
 /build
 /.vs
 /.vscode
-CMakeLists.txt
+/CMakeLists.txt
+/bin
+/obj
+/node_modules
+/dist
+/coverage
+/logs
