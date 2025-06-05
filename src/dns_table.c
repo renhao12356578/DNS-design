@@ -41,7 +41,7 @@ void insertNode(const uint8_t* IP, const char* domain) {
     // 域名不存在，创建一个新条目
     HashEntry* newEntry = (HashEntry*)malloc(sizeof(HashEntry));
     if (!newEntry) {
-        fprintf(stderr, "错误：为哈希表新条目分配内存失败。\n");
+        log_message(ERROR, "错误：为哈希表新条目分配内存失败。\n");
         return;
     }
     
@@ -80,7 +80,7 @@ void initDnsResolver() {
     // 使用calloc分配，它会自动将所有指针初始化为NULL
     hashTable = (HashEntry**)calloc(hashTableSize, sizeof(HashEntry*));
     if (!hashTable) {
-        fprintf(stderr, "错误：为哈希表分配内存失败。\n");
+        log_message(ERROR, "错误：为哈希表分配内存失败。\n");
         exit(1);
     }
 }

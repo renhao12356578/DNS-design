@@ -43,6 +43,6 @@ uint16_t resetId(uint16_t userId, struct sockaddr_in clientAddress) {
     }
 
     // 如果遍历了一整圈都没有找到可用的ID，说明表已满
-    fprintf(stderr, "警告：ID映射表已满，无法分配新ID。\n");
+    log_message(ERROR, "警告：ID映射表已满，无法分配新ID。\n");
     return MAX_ID_SIZE; // 使用标准常量表示失败
 }

@@ -1,5 +1,4 @@
 //打印DNS报文
-#include "dns_struct.h"
 #include  "dns_mes_print.h"
 #include <ctype.h> 
 // For isprint()
@@ -35,7 +34,7 @@ void printRR(const dns_rr* rr) {
     if (!rr) return;
 
     // 打印通用的RR头部信息
-    printf("Name (domin): %s, TTL: %u, Class: %s, Type: %s, Data Length: %u\n",
+    log_message(LOG_DEBUG, "Name (domin): %s, TTL: %u, Class: %s, Type: %s, Data Length: %u",
         rr->name,
         rr->ttl,
         (rr->rrClass == DNS_CLASS_IN) ? "IN" : "Unknown",
@@ -43,48 +42,45 @@ void printRR(const dns_rr* rr) {
         rr->rdLength);
 
     // 打印特定类型的RDATA
-    printf("RDATA: ");
     switch (rr->type) {
         case DNS_TYPE_A: {   //ipv4
             char ip_str[INET_ADDRSTRLEN];
             inet_ntop(AF_INET, rr->rdata.A_record.address, ip_str, INET_ADDRSTRLEN);
-            printf("Address: %s\n", ip_str);
+            log_message(LOG_DEBUG, "RDATA: Address: %s", ip_str);
             break;
         }
         case DNS_TYPE_AAAA: {
             char ip_str[INET6_ADDRSTRLEN];
             inet_ntop(AF_INET6, rr->rdata.AAAA_record.address, ip_str, INET6_ADDRSTRLEN);
-            printf("Address: %s\n", ip_str);
+            log_message(LOG_DEBUG, "RDATA: Address: %s", ip_str);
             break;
         }
         case DNS_TYPE_CNAME:
-            printf("CNAME: %s\n", rr->rdata.CNAME_record.cname);
+            log_message(LOG_DEBUG, "RDATA: CNAME: %s", rr->rdata.CNAME_record.cname);
             break;
         case DNS_TYPE_NS:
-            printf("Name Server: %s\n", rr->rdata.NS_record.nsdname);
+            log_message(LOG_DEBUG, "RDATA: Name Server: %s", rr->rdata.NS_record.nsdname);
             break;
         case DNS_TYPE_PTR:
-            printf("Pointer: %s\n", rr->rdata.PTR_record.ptrdname);
+            log_message(LOG_DEBUG, "RDATA: Pointer: %s", rr->rdata.PTR_record.ptrdname);
             break;
         case DNS_TYPE_MX:
-            printf("Preference: %u, Mail Exchange: %s\n",
+            log_message(LOG_DEBUG, "RDATA: Preference: %u, Mail Exchange: %s",
                 rr->rdata.MX_record.preference, rr->rdata.MX_record.exchange);
             break;
         case DNS_TYPE_TXT:
-             // 假设TXT数据是单个C字符串
-            printf("Text: \"%s\"\n", rr->rdata.TXT_record.txt_data);
+            log_message(LOG_DEBUG, "RDATA: Text: \"%s\"", rr->rdata.TXT_record.txt_data);
             break;
         case DNS_TYPE_SOA:
-            printf("\n");
-            printf("      Primary Name Server: %s\n", rr->rdata.SOA_record.mname);
-            printf("      Responsible Mailbox: %s\n", rr->rdata.SOA_record.rname);
-            printf("      Serial: %u, Refresh: %u, Retry: %u, Expire: %u, Minimum TTL: %u\n",
+            log_message(LOG_DEBUG, "RDATA: Primary Name Server: %s", rr->rdata.SOA_record.mname);
+            log_message(LOG_DEBUG, "RDATA: Responsible Mailbox: %s", rr->rdata.SOA_record.rname);
+            log_message(LOG_DEBUG, "RDATA: Serial: %u, Refresh: %u, Retry: %u, Expire: %u, Minimum TTL: %u",
                 rr->rdata.SOA_record.serial, rr->rdata.SOA_record.refresh,
                 rr->rdata.SOA_record.retry, rr->rdata.SOA_record.expire,
                 rr->rdata.SOA_record.minimum);
             break;
         default:
-            printf("Data format not implemented for printing.\n");
+            log_message(LOG_DEBUG, "RDATA: Data format not implemented for printing.");
             break;
     }
 }
@@ -98,30 +94,32 @@ void printRR(const dns_rr* rr) {
  * @param length 字节流的长度。
  */
 void printDnstring(char* pstring, unsigned int length) {
-    printf("--- DNS Message Raw Data (Length: %u bytes) ---\n", length);
+    log_message(LOG_DEBUG, "--- DNS Message Raw Data (Length: %u bytes) ---", length);
+    char line[128] = {0};
+    char ascii[17] = {0};
+    int pos = 0;
+    
     for (unsigned int i = 0; i < length; ++i) {
-        // 打印十六进制值
-        printf("%02X ", (unsigned char)pstring[i]);
+        // 添加十六进制值
+        pos += snprintf(line + pos, sizeof(line) - pos, "%02X ", (unsigned char)pstring[i]);
+        ascii[i % 16] = isprint((unsigned char)pstring[i]) ? (unsigned char)pstring[i] : '.';
         
-        // 每16个字节换行并打印ASCII值
+        // 每16个字节输出一行
         if ((i + 1) % 16 == 0 || (i + 1) == length) {
             // 补齐空格
-            if ((i + 1) % 16 != 0) {
-                for (unsigned int j = 0; j < 16 - ((i + 1) % 16); ++j) {
-                    printf("   ");
-                }
+            while (pos < 48) {
+                pos += snprintf(line + pos, sizeof(line) - pos, "   ");
             }
-            printf(" | ");
-            
-            // 打印ASCII
-            unsigned int start = (i / 16) * 16;
-            for (unsigned int j = start; j <= i; ++j) {
-                printf("%c", isprint((unsigned char)pstring[j]) ? (unsigned char)pstring[j] : '.');
-            }
-            printf("\n");
+            // 添加ASCII部分
+            ascii[i % 16 + 1] = '\0';
+            snprintf(line + pos, sizeof(line) - pos, "| %s", ascii);
+            log_message(LOG_DEBUG, "%s", line);
+            pos = 0;
+            memset(line, 0, sizeof(line));
+            memset(ascii, 0, sizeof(ascii));
         }
     }
-    printf("------------------------------------------------\n\n");
+    log_message(LOG_DEBUG, "------------------------------------------------");
 }
 
 /**
@@ -130,32 +128,31 @@ void printDnstring(char* pstring, unsigned int length) {
  */
 void printHeader(dns_Message* msg) {
     if (!msg || !msg->header) {
-        printf("Header is NULL.\n");
+        log_message(LOG_DEBUG, "Header is NULL.");
         return;
     }
-    dns_header* h=msg->header;
-    printf("----------------------------header----------------------------\n");
-    printf("Transaction ID: 0x%04X (%u)\n",h->ID, h->ID);
+    dns_header* h = msg->header;
+    log_message(LOG_DEBUG, "----------------------------header----------------------------");
+    log_message(LOG_DEBUG, "Transaction ID: 0x%04X (%u)", h->ID, h->ID);
 
     // Flags
-    printf("Flags: \n");
-    printf("QR=%d (Response),\n", h->QR);
-    printf("Opcode=%d,\n", h->Opcode);
-    printf("AA = %d,\n", h->AA);
-    printf("TC = %d,\n", h->TC);
-    printf("RD = %d,\n", h->RD);
-    printf("RA = %d\n", h->RA);
-    printf("rcode = %d (%s)\n", h->RCODE,(h->RCODE == DNS_RCODE_OK) ? "No error" : "Error");
-
+    log_message(LOG_DEBUG, "Flags:");
+    log_message(LOG_DEBUG, "QR=%d (Response)", h->QR);
+    log_message(LOG_DEBUG, "Opcode=%d", h->Opcode);
+    log_message(LOG_DEBUG, "AA = %d", h->AA);
+    log_message(LOG_DEBUG, "TC = %d", h->TC);
+    log_message(LOG_DEBUG, "RD = %d", h->RD);
+    log_message(LOG_DEBUG, "RA = %d", h->RA);
+    log_message(LOG_DEBUG, "rcode = %d (%s)", h->RCODE, 
+               (h->RCODE == DNS_RCODE_OK) ? "No error" : "Error");
 
     // Counts
-    printf("Questions: %u\n", msg->header->QDCOUNT);
-    printf("Answer RRs: %u\n", msg->header->ANCOUNT);
-    printf("Authority RRs: %u\n", msg->header->NSCOUNT);
-    printf("Additional RRs: %u\n", msg->header->ARCOUNT);
-    printf("----------------------------------------------------------------\n\n");
+    log_message(LOG_DEBUG, "Questions: %u", msg->header->QDCOUNT);
+    log_message(LOG_DEBUG, "Answer RRs: %u", msg->header->ANCOUNT);
+    log_message(LOG_DEBUG, "Authority RRs: %u", msg->header->NSCOUNT);
+    log_message(LOG_DEBUG, "Additional RRs: %u", msg->header->ARCOUNT);
+    log_message(LOG_DEBUG, "----------------------------------------------------------------");
 }
-
 
 /**
  * @brief 打印DNS报文的问题部分。
@@ -163,15 +160,16 @@ void printHeader(dns_Message* msg) {
  */
 void printQuestion(dns_Message* msg) {
     if (!msg || !msg->question) {
-        printf("Question section is NULL.\n");
+        log_message(LOG_DEBUG, "Question section is NULL.");
         return;
     }
     dns_question* q = msg->question;
-    printf("---------------------------- DNS Question----------------------------\n");
-    printf("  Name: %s\n", q->QNAME);
-    printf("  Type: %s (%u)\n", type_to_string(q->QTYPE), q->QTYPE);
-    printf("  Class: %s (%u)\n", (q->QCLASS == DNS_CLASS_IN) ? "IN" : "Unknown", q->QCLASS);
-    printf("--------------------------------------------------------------------\n\n");
+    log_message(LOG_DEBUG, "---------------------------- DNS Question----------------------------");
+    log_message(LOG_DEBUG, "  Name: %s", q->QNAME);
+    log_message(LOG_DEBUG, "  Type: %s (%u)", type_to_string(q->QTYPE), q->QTYPE);
+    log_message(LOG_DEBUG, "  Class: %s (%u)", 
+               (q->QCLASS == DNS_CLASS_IN) ? "IN" : "Unknown", q->QCLASS);
+    log_message(LOG_DEBUG, "--------------------------------------------------------------------");
 }
 
 /**
@@ -179,17 +177,34 @@ void printQuestion(dns_Message* msg) {
  * @param msg 指向包含已解析报文的dns_Message结构体。
  */
 void printAnswer(dns_Message* msg) {
-    if (!msg || !msg->answer||msg->header->ANCOUNT == 0) {
-        printf("Answer section is empty or NULL.\n\n");
+    if (!msg || !msg->answer || msg->header->ANCOUNT == 0) {
+        log_message(LOG_DEBUG, "Answer section is empty or NULL.");
         return;
     }
     dns_rr* rr = msg->answer;
-    printf("-------------------------DNS Answer Section-------------------------\n");
+    log_message(LOG_DEBUG, "-------------------------DNS Answer Section-------------------------");
     int count = 1;
     while (rr) {
-        printf("[%d]\n", count++);
+        log_message(LOG_DEBUG, "[%d]", count++);
         printRR(rr);
         rr = rr->next;
     }
-    printf("--------------------------------------------------------------------\n\n");
+    log_message(LOG_DEBUG, "--------------------------------------------------------------------");
 }
+
+/**
+ * @brief 答应问题和回答数以及问题和回答种类
+ */
+void printQuestionAndAnswer(dns_Message msg){
+    log_message(LOG_DEBUG, "[QDCOUNT: %d], [ANCOUNT: %d]", msg.header->QDCOUNT,msg.header->ANCOUNT);
+    log_message(LOG_DEBUG, "Question type [%s]", type_to_string(msg.question->QTYPE));
+
+    int count = 1;
+    dns_rr* answer = msg.answer;
+    while(count <= msg.header->ANCOUNT&&answer != NULL){
+        log_message(LOG_DEBUG, "Answer %d type [%s]", count,type_to_string(answer->type));
+        answer = answer -> next;
+        count++;
+    }
+}
+

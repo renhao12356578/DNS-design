@@ -13,10 +13,8 @@ static char* DEFAULT_DNS_SERVER = "10.3.9.5";
 char* host_path = NULL;
 char* LOG_PATH = NULL;
 char* dnsServerAddress = NULL;
-int debug_mode = 0;    // 默认不开启调试模式
 int log_mode = 0;      // 默认不开启日志记录
 u_long socketMode = 0;    // 默认非阻塞模式
-int islisten = 0;      // 起始不监听
 
 char IPAddr[DNS_RR_NAME_MAX_SIZE];
 char domain[DNS_RR_NAME_MAX_SIZE];
@@ -40,9 +38,9 @@ void printHelpInfo() {
     printf("| Example: nslookup www.bupt.edu.cn 127.0.0.1                                  |\n");
     printf("|                                                                              |\n");
     printf("| Arguments:                                                                   |\n");
-    printf("|   -i                         打印系统基本信息                                |\n");
     printf("|   -l                         日志记录                                        |\n");
-    printf("|   -d                         开启调试模式                                    |\n");
+    printf("|   -d                         查看收发信息                                    |\n");
+    printf("|   -dd                         开启调试模式                                   |\n");
     printf("|   -s [server_address]        设置远程DNS服务器地址                           |\n");
     printf("|   -m [mode]                  设置程序的运行模式:0/1  非阻塞/阻塞             |\n");
     printf("+------------------------------------------------------------------------------+\n");
@@ -70,7 +68,6 @@ void configInit(int argc, char* argv[]) {
     printf("  - Log path: %s\n", LOG_PATH);
     printf("  - DNS server: %s\n", dnsServerAddress);
     printf("  - Socket mode: %s\n", socketMode == 0 ? "非阻塞" : "阻塞");
-    printf("  - Debug mode: %s\n", debug_mode ? "开启" : "关闭");
     printf("  - Log mode: %s\n", log_mode ? "开启" : "关闭");
 
     // 初始化各子系统
@@ -100,29 +97,28 @@ void getConfig(int argc, char* argv[]) {
     printHelpInfo();
 
     for (int index = 1; index < argc; index++) {
-        if (strcmp(argv[index], "-d") == 0) {
-            debug_mode = 1;  // 开启调试模式
-        }
-        else if (strcmp(argv[index], "-l") == 0) {
+        if (strcmp(argv[index], "-l") == 0) {
             log_mode = 1;    // 开启日志模式
-        }
-        else if (strcmp(argv[index], "-i") == 0) {
-            printf("Hosts path: %s\n", host_path);
-            printf("Remote DNS server address: %s\n", dnsServerAddress);
-            printf("Mode: %s\n", socketMode == 0 ? "nonblock" : "poll");
         }
         else if (strcmp(argv[index], "-s") == 0 && index + 1 < argc) {
             // 设置远程DNS服务器地址，安全地替换现有地址
             free(dnsServerAddress);
             dnsServerAddress = strdup(argv[++index]);
             if (!dnsServerAddress) {
-                fprintf(stderr, "远程DNS服务器地址内存分配失败\n");
+                log_message(ERROR, "远程DNS服务器地址内存分配失败\n");
                 exit(EXIT_FAILURE);
             }
         }
         else if (strcmp(argv[index], "-m") == 0 && index + 1 < argc) {
             // 设置程序的运行模式
             socketMode = atoi(argv[++index]);
+        }else if(strcmp(argv[index], "-p") == 0 && index + 1 < argc){
+            free(host_path);
+            host_path = strdup(argv[++index]);
+            if (!host_path) {
+                log_message(ERROR, "路径地址内存分配失败\n");
+                exit(EXIT_FAILURE);
+            }
         }
     }
 }
@@ -157,14 +153,12 @@ void getHostInfo(FILE* file) {
             // 插入到域名解析表
             insertNode(ipBytes, domainBuffer);
             count++;
-        } else if (debug_mode) {
+        } else {
             printf("警告：无效的IP地址格式: %s\n", ipBuffer);
         }
     }
 
-    if (debug_mode) {
-        printf("已加载 %d 条域名地址信息\n\n", count);
-    }
+    printf("已加载 %d 条域名地址信息\n\n", count);
 }
 
 // 记录DNS查询日志
@@ -173,9 +167,7 @@ void writeLog(char* domain, uint8_t* ip_addr) {
     
     FILE* fp = fopen(LOG_PATH, "a");
     if (fp == NULL) {
-        if (debug_mode) {
-            fprintf(stderr, "无法打开日志文件: %s\n", LOG_PATH);
-        }
+        log_message(ERROR, "无法打开日志文件: %s\n", LOG_PATH);
         return;
     }
 

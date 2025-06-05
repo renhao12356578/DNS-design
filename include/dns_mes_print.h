@@ -1,5 +1,6 @@
 #pragma once
 #include "dns_struct.h"
+#include "output_level.h"
 
 // 打印 DNS 报文字节流
 void printDnstring(char* pstring, unsigned int length);

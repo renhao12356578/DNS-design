@@ -104,7 +104,7 @@ int cacheGet(uint8_t *ipv4, char* domain) {
             // 检查TTL是否过期
             if (isExpired(lru_node)) {
                 // TTL已过期，从缓存中删除该条目
-                printf("Cache entry for domain '%s' has expired (TTL: %u seconds)\n", 
+                log_message(LOG_DEBUG,"Cache entry for domain '%s' has expired (TTL: %u seconds)", 
                        domain, lru_node->ttl);
                 _removeFromHashTable(domain);
                 _unlinkNode(lru_node);
@@ -121,9 +121,6 @@ int cacheGet(uint8_t *ipv4, char* domain) {
                 _unlinkNode(lru_node);
                 _addNodeToFront(lru_node);
             }
-            
-            printf("Cache hit for domain '%s' (TTL remaining: %ld seconds)\n", 
-                   domain, lru_node->ttl - (time(NULL) - lru_node->insert_time));
             return 1; // 返回1表示命中
         }
         hash_node = hash_node->next;
@@ -152,7 +149,7 @@ void cachePut(uint8_t ipv4[4], char* domain, uint32_t ttl)
                 _unlinkNode(lru_node);
                 _addNodeToFront(lru_node);
             }
-            printf("Updated cache entry for domain '%s' with TTL %u seconds\n", domain, ttl);
+            log_message(LOG_DEBUG,"Updated cache entry for domain '%s' with TTL %u seconds", domain, ttl);
             return;
         }
         hash_node = hash_node->next;
@@ -186,7 +183,7 @@ void cachePut(uint8_t ipv4[4], char* domain, uint32_t ttl)
     g_hash_table[index] = new_hash_node;
 
     g_size++;
-    printf("Added new cache entry for domain '%s' with TTL %u seconds\n", domain, ttl);
+    log_message(LOG_DEBUG ,"Added new cache entry for domain '%s' with TTL %u seconds", domain, ttl);
 }
 
 // 检查并清理所有过期的缓存条目
@@ -200,7 +197,7 @@ int cacheCleanExpired() {
         lruNode* next = current->next; // 保存下一个节点，因为当前节点可能被删除
         
         if (isExpired(current)) {
-            printf("Cleaning expired cache entry for domain '%s'\n", current->domain);
+            log_message(LOG_DEBUG ,"Cleaning expired cache entry for domain '%s'", current->domain);
             _removeFromHashTable(current->domain);
             _unlinkNode(current);
             free(current);
@@ -212,7 +209,7 @@ int cacheCleanExpired() {
     }
     
     if (expired_count > 0) {
-        printf("Cleaned %d expired cache entries\n", expired_count);
+        log_message(LOG_DEBUG,"Cleaned %d expired cache entries\n", expired_count);
     }
     
     return expired_count;

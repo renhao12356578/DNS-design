@@ -5,10 +5,8 @@
 #include "dns_table.h"
 
 // 调试和日志模式
-extern int debug_mode;
 extern int log_mode;
 extern u_long socketMode;
-extern int islisten;
 
 // 路径配置
 extern char* host_path;  
@@ -18,7 +16,6 @@ extern char* dnsServerAddress;
 // 临时缓冲区
 extern char IPAddr[DNS_RR_NAME_MAX_SIZE];
 extern char domain[DNS_RR_NAME_MAX_SIZE];
-
 
 
 // 配置初始化与清理

@@ -46,23 +46,19 @@ void str_to_dnsstruct(dns_Message* pmsg, uint8_t* buffer, uint8_t* start) {
     pmsg->question = NULL; // 初始化为NULL，在getDnsquestion中动态添加
     pmsg->answer = NULL;   // 初始化为NULL，在getDnsanswer中动态添加
 
-    if (debug_mode == 1)
-        printf("收到的报文如下：\n");
+    log_message(LOG_DEBUG,"报文如下：");
 
     // 获取报文头
     buffer = getDnsheader(pmsg, buffer);  // buffer指向读取完报头后的地址
-    if(debug_mode==1)
-        printHeader(pmsg);
+    printHeader(pmsg);
 
     // 获取询问内容
     buffer = getDnsquestion(pmsg, buffer, start);  // buffer指向读取完询问内容后的地址
-    if (debug_mode==1)
-        printQuestion(pmsg);
+    printQuestion(pmsg);
 
     // 获取应答内容
     buffer = getDnsanswer(pmsg, buffer, start);  // buffer指向读取完应答内容后的地址
-    if (debug_mode==1)
-        printAnswer(pmsg);
+    printAnswer(pmsg);
 }
 
 // 从缓冲区中读取DNS报文头信息并存储到msg结构体中
@@ -182,14 +178,18 @@ uint8_t* getDnsanswer(dns_Message* msg, uint8_t* buffer, uint8_t* start) {
                 }
                 break;
             case DNS_TYPE_CNAME: // CNAME记录
-                p->rdata.CNAME_record.cname = malloc(p->rdLength + 1);
-                if (!p->rdata.CNAME_record.cname) {
-                    allocation_failed = true;
-                    break;
+                {
+                    char cname[DNS_RR_NAME_MAX_SIZE] = {0};
+                    // 使用getDomain函数正确解析CNAME记录中的域名
+                    buffer = getDomain(buffer, cname, start);
+                    
+                    p->rdata.CNAME_record.cname = malloc(strlen(cname) + 1);
+                    if (!p->rdata.CNAME_record.cname) {
+                        allocation_failed = true;
+                        break;
+                    }
+                    strcpy(p->rdata.CNAME_record.cname, cname);
                 }
-                memcpy(p->rdata.CNAME_record.cname, buffer, p->rdLength);
-                p->rdata.CNAME_record.cname[p->rdLength] = '\0';
-                buffer += p->rdLength;
                 break;
             case DNS_TYPE_MX: // MX记录
                 p->rdata.MX_record.preference = readBits(&buffer, 16);
@@ -247,6 +247,7 @@ uint8_t* getDnsanswer(dns_Message* msg, uint8_t* buffer, uint8_t* start) {
         p->next = msg->answer;
         msg->answer = p;
     }
+
     return buffer;
 }
 
@@ -260,38 +261,37 @@ uint8_t* getDomain(uint8_t* buffer, char* name, uint8_t* start) {
     int i = 0;
     int len = 0;
 
-    // 若第一个字节的前2位为11，则表示指针，后14位为偏移量，跳转到DNS报文段起始地址 + 偏移量处
-    if (*ptr >= 0xc0) {
-        uint16_t offset = (*ptr & 0x3f) << 8;
-        offset |= *(ptr + 1);  // 获取后14位偏移量
-        getDomain(start + offset, name, start);
-        return buffer + 2;
-    }
-
+    // 检查压缩指针（以11开头的两个字节）
     while (*ptr != 0) {
-        uint8_t val = *ptr++;
-
-        // 检测压缩指针
-        if (val >= 0xc0) {
-            uint16_t offset = (val & 0x3f) << 8 | *ptr++;
-            if (i > 0) name[i++] = '.';
-            uint8_t* savePtr = buffer;
+        if (*ptr >= 0xc0) {  // 检测压缩指针
+            uint16_t offset = ((*ptr & 0x3f) << 8) | *(ptr + 1);
+            if (i > 0 && name[i-1] != '.') {  // 确保添加分隔符
+                name[i++] = '.';
+            }
             getDomain(start + offset, name + i, start);
-            return ptr; // 返回压缩指针之后的位置
+            return ptr + 2;  // 返回压缩指针后的位置
         }
 
-        // 处理标签长度和标签内容
+        // 处理普通标签
         if (len == 0) {
-            len = val;
-            if (i > 0) name[i++] = '.';
+            len = *ptr++;  // 获取标签长度
+            if (i > 0 && name[i-1] != '.') {  // 在标签之间添加点
+                name[i++] = '.';
+            }
         } else {
-            name[i++] = val;
+            name[i++] = *ptr++;  // 复制标签字符
             len--;
         }
     }
 
-    name[i] = '\0'; // 确保字符串以null结尾
-    return ptr + 1; // 跳过结束的0字节
+    name[i] = '\0';  // 确保字符串以null结尾
+    
+    // 移除末尾的点（如果存在）
+    if (i > 0 && name[i-1] == '.') {
+        name[i-1] = '\0';
+    }
+
+    return ptr + 1;  // 跳过结束的0字节
 }
 
 // 将指定数量的位（8, 16, 32）设置到缓冲区中
@@ -367,7 +367,7 @@ uint8_t* setDnsheader(dns_Message* msg, uint8_t* buffer, uint8_t* ip_addr) {
 
     writeBits(&buffer, 16, flags); // 设置标志字段
     writeBits(&buffer, 16, header->QDCOUNT); // 设置问题数
-    writeBits(&buffer, 16, header->ANCOUNT); // 设置回答数
+    writeBits(&buffer, 16, 1); // 设置回答数
     writeBits(&buffer, 16, header->NSCOUNT); // 设置权威记录数
     writeBits(&buffer, 16, header->ARCOUNT); // 设置附加记录数
 
@@ -392,7 +392,7 @@ uint8_t* setDnsquestion(dns_Message* msg, uint8_t* buffer) {
         
         p = p->next;
     }
-    
+
     return buffer;
 }
 

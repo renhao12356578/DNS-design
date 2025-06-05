@@ -199,6 +199,7 @@
 0.0.0.0 zelnet.ru
 0.0.0.0 zhp.gdynia.pl
 0.0.0.0 test0
+0.0.0.0 www.bilibili.com
 11.111.11.111 test1
 22.22.222.222 test2
 202.108.33.89 www.y.com.cn

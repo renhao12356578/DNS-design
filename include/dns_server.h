@@ -5,6 +5,8 @@
 #include"dns_config.h"
 #include"dns_convert.h"
 #include"dns_struct.h"
+#include"output_level.h"
+#include"dns_mes_print.h"
 
 u_long socketMode;           // 阻塞/非阻塞模式
 int dnsSocket;               // 统一的DNS socket
@@ -14,8 +16,6 @@ int addressLength;
 
 int clientPort;           // 客户端端口号
 char* dnsServerAddress;   // 远程主机
-
-int islisten;
 
 void initSocket();
 void closeSocketServer();
