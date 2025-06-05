@@ -33,14 +33,15 @@ void printHelpInfo() {
     printf("▐░░░░░░░░░░▌ ▐░▌      ▐░░▌▐░░░░░░░░░░░▌     ▐░▌       ▐░▌▐░░░░░░░░░░░▌▐░░░░░░░░░░░▌▐░▌       ▐░▌     ▐░▌     \n");
     printf(" ▀▀▀▀▀▀▀▀▀▀   ▀        ▀▀  ▀▀▀▀▀▀▀▀▀▀▀       ▀         ▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀▀▀▀▀▀▀▀▀▀▀  ▀         ▀       ▀      \n");
     printf("+------------------------------------------------------------------------------+\n");
-    printf("|                             Welcome to use our DNS relay system!             |\n");
+    printf("|                      Welcome to use our DNS relay system!                    |\n");
+    printf("|                       Designed by RenHao and PengQuanYu                      |\n");
     printf("|                                                                              |\n");
     printf("| Example: nslookup www.bupt.edu.cn 127.0.0.1                                  |\n");
     printf("|                                                                              |\n");
     printf("| Arguments:                                                                   |\n");
     printf("|   -l                         日志记录                                        |\n");
     printf("|   -d                         查看收发信息                                    |\n");
-    printf("|   -dd                         开启调试模式                                   |\n");
+    printf("|   -dd                        开启调试模式                                    |\n");
     printf("|   -s [server_address]        设置远程DNS服务器地址                           |\n");
     printf("|   -m [mode]                  设置程序的运行模式:0/1  非阻塞/阻塞             |\n");
     printf("+------------------------------------------------------------------------------+\n");
@@ -63,7 +64,7 @@ void configInit(int argc, char* argv[]) {
 
     // 打印调试信息
     printf("配置初始化完成:\n");
-    set_log_level(argv[1]);
+    if(argc>=2) set_log_level(argv[1]);
     printf("  - Hosts path: %s\n", host_path);
     printf("  - Log path: %s\n", LOG_PATH);
     printf("  - DNS server: %s\n", dnsServerAddress);
@@ -141,8 +142,12 @@ void getHostInfo(FILE* file) {
     if (!file) return;
 
     int count = 0;
+    int domain_count = 0;
     char ipBuffer[64];
     char domainBuffer[DNS_RR_NAME_MAX_SIZE];
+    char currentDomain[DNS_RR_NAME_MAX_SIZE] = {0};
+    uint8_t ipArray[MAX_IP_COUNT][4]; // 使用MAX_IP_COUNT存储多个IP
+    uint8_t ip_count = 0;
     
     // 按行读取hosts文件
     while (fscanf(file, "%63s %s", ipBuffer, domainBuffer) == 2) {
@@ -150,15 +155,49 @@ void getHostInfo(FILE* file) {
         
         // 转换IP地址字符串为字节数组
         if (TranIP(ipBytes, ipBuffer)) {
-            // 插入到域名解析表
-            insertNode(ipBytes, domainBuffer);
-            count++;
+            // 检查是否与上一个域名相同
+            if (strlen(currentDomain) > 0 && strcmp(currentDomain, domainBuffer) != 0) {
+                // 域名不同，将上一个域名的所有IP插入到域名解析表
+                uint32_t ttls[MAX_IP_COUNT];
+                // 为本地hosts记录设置默认TTL (24小时)
+                for (int i = 0; i < ip_count; i++) {
+                    ttls[i] = 86400;
+                }
+                insertNode(ipArray, ttls, ip_count, currentDomain);
+                domain_count++;
+                // 重置IP计数
+                ip_count = 0;
+            }
+            
+            // 保存当前域名
+            strncpy(currentDomain, domainBuffer, DNS_RR_NAME_MAX_SIZE - 1);
+            currentDomain[DNS_RR_NAME_MAX_SIZE - 1] = '\0';
+            
+            // 添加当前IP地址到数组（如果还有空间）
+            if (ip_count < MAX_IP_COUNT) {
+                memcpy(ipArray[ip_count], ipBytes, 4);
+                ip_count++;
+                count++;
+            } else {
+                printf("警告:域名 %s 的IP地址数量超过最大限制 %d\n", domainBuffer, MAX_IP_COUNT);
+            }
         } else {
-            printf("警告：无效的IP地址格式: %s\n", ipBuffer);
+            printf("警告:无效的IP地址格式: %s\n", ipBuffer);
         }
     }
+    
+    // 处理最后一个域名
+    if (strlen(currentDomain) > 0 && ip_count > 0) {
+        uint32_t ttls[MAX_IP_COUNT];
+        // 为本地hosts记录设置默认TTL (24小时)
+        for (int i = 0; i < ip_count; i++) {
+            ttls[i] = 86400;
+        }
+        insertNode(ipArray, ttls, ip_count, currentDomain);
+        domain_count++;
+    }
 
-    printf("已加载 %d 条域名地址信息\n\n", count);
+    printf("已加载 %d 条域名地址信息，共 %d 个不同域名\n\n", count, domain_count);
 }
 
 // 记录DNS查询日志

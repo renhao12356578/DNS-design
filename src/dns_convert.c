@@ -168,8 +168,16 @@ uint8_t* getDnsanswer(dns_Message* msg, uint8_t* buffer, uint8_t* start) {
         // 根据不同的类型进行处理资源数据
         switch (p->type) {
             case DNS_TYPE_A:    // IPv4地址
-                for (int j = 0; j < 4; j++) {
-                    p->rdata.A_record.address[j] = readBits(&buffer, 8);
+                if (p->rdLength >= 4) {
+                    // 读取IPv4地址（每个A记录只读取一个地址）
+                    for (int j = 0; j < 4; j++) {
+                        p->rdata.A_record.address[j] = readBits(&buffer, 8);
+                    }
+                    
+                    // 如果RR长度超过了我们读取的数据量，跳过剩余部分
+                    if (p->rdLength > 4) {
+                        buffer += (p->rdLength - 4);
+                    }
                 }
                 break;
             case DNS_TYPE_AAAA: // IPv6地址
@@ -344,14 +352,38 @@ uint8_t* setDnsheader(dns_Message* msg, uint8_t* buffer, uint8_t* ip_addr) {
     header->QR = 1;       // 设置为回答报文
     header->AA = 1;       // 设置为权威域名服务器
     header->RA = 1;       // 设置为可用递归
-    header->QDCOUNT = 1;  // 设置回答数为1
+    header->QDCOUNT = 1;  // 设置问题数为1
 
-    if (ip_addr[0] == 0 && ip_addr[1] == 0 && ip_addr[2] == 0 && ip_addr[3] == 0) {
-        // 若IP地址为0.0.0.0，表示该域名被屏蔽
-        header->RCODE = 3;  // 名字错误
-    } else {
+    // 计算实际回答记录数
+    int answerCount = 0;
+    if (ip_addr[0] != 0 || ip_addr[1] != 0 || ip_addr[2] != 0 || ip_addr[3] != 0) {
+        // 如果第一个IP地址不是0.0.0.0，则至少有一个回答
+        answerCount = 1;
+        
+        // 如果answer链表存在，计算A记录数量
+        if (msg->answer) {
+            dns_rr* current = msg->answer;
+            while (current) {
+                if (current->type == DNS_TYPE_A && current->rrClass == DNS_CLASS_IN) {
+                    answerCount++;
+                }
+                current = current->next;
+            }
+            
+            // 第一个记录已经通过ip_addr参数处理了，所以这里要减1避免重复计数
+            if (answerCount > 1) {
+                answerCount--;
+            }
+        }
+        
         header->RCODE = 0;  // 无差错
+    } else {
+        // IP地址为0.0.0.0，表示该域名被屏蔽
+        header->RCODE = 3;  // 名字错误
     }
+    
+    // 设置实际回答数
+    header->ANCOUNT = answerCount;
 
     writeBits(&buffer, 16, header->ID); // 设置ID
 
@@ -367,7 +399,7 @@ uint8_t* setDnsheader(dns_Message* msg, uint8_t* buffer, uint8_t* ip_addr) {
 
     writeBits(&buffer, 16, flags); // 设置标志字段
     writeBits(&buffer, 16, header->QDCOUNT); // 设置问题数
-    writeBits(&buffer, 16, 1); // 设置回答数
+    writeBits(&buffer, 16, header->ANCOUNT); // 设置回答数
     writeBits(&buffer, 16, header->NSCOUNT); // 设置权威记录数
     writeBits(&buffer, 16, header->ARCOUNT); // 设置附加记录数
 
@@ -402,16 +434,37 @@ uint8_t* setDnsanswer(dns_Message* msg, uint8_t* buffer, uint8_t* ip_addr) {
         return buffer;
     }
 
+    // 创建一个回答
     buffer = setDomain(buffer, msg->question->QNAME);
-
     writeBits(&buffer, 16, 1);  // type (A记录)
     writeBits(&buffer, 16, 1);  // rrClass (IN类)
-    writeBits(&buffer, 32, 4);  // ttl (4秒)
+    writeBits(&buffer, 32, 4);  // ttl (120秒)
     writeBits(&buffer, 16, 4);  // rd_length (IPv4地址长度)
-
+    
     // 写入IPv4地址
     for (int i = 0; i < 4; i++) {
         *buffer++ = ip_addr[i];
+    }
+
+    // 如果有答案链表，则添加其他的A记录
+    if (msg->answer && msg->answer->next) {
+        dns_rr* current = msg->answer->next;  // 跳过第一个记录，因为我们已经使用ip_addr创建了一个
+        
+        while (current != NULL) {
+            if (current->type == DNS_TYPE_A && current->rrClass == DNS_CLASS_IN) {
+                buffer = setDomain(buffer, msg->question->QNAME);
+                writeBits(&buffer, 16, 1);  // type (A记录)
+                writeBits(&buffer, 16, 1);  // rrClass (IN类)
+                writeBits(&buffer, 32, 4);  // 使用记录中的ttl
+                writeBits(&buffer, 16, 4);  // rd_length (IPv4地址长度)
+                
+                // 写入IPv4地址
+                for (int i = 0; i < 4; i++) {
+                    *buffer++ = current->rdata.A_record.address[i];
+                }
+            }
+            current = current->next;
+        }
     }
 
     return buffer;

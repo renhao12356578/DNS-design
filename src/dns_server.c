@@ -174,7 +174,8 @@ void receiveData() {
 void handleClientRequest(uint8_t* buffer, int msg_size, struct sockaddr_in* clientAddr) {
     uint8_t buffer_new[BUFFER_SIZE];  // 回复给客户端的报文
     dns_Message msg;                  // 报文结构体
-    uint8_t ip_addr[4] = { 0 };       // 查询域名得到的IP地址
+    uint8_t ip_addrs[MAX_IP_COUNT][4] = { {0} };  // 查询域名得到的多个IP地址
+    uint8_t ip_count = 0;            // IP地址数量
     int is_found = 0;                 // 是否查到
 
     log_message(LOG_INFO,"Processing client request");
@@ -188,28 +189,35 @@ void handleClientRequest(uint8_t* buffer, int msg_size, struct sockaddr_in* clie
     printQuestionAndAnswer(msg);
 
     /* 从缓存查找 */
-    is_found = cacheGet(ip_addr, msg.question->QNAME);
+    is_found = cacheGet(ip_addrs, &ip_count, msg.question->QNAME);
     if(is_found != 0 && msg.question->QTYPE == DNS_TYPE_A){
-        log_message(LOG_DEBUG, "Cache hit for [Domain: %s] ,[IP: %d.%d.%d.%d]", msg.question->QNAME ,ip_addr[0], ip_addr[1], ip_addr[2], ip_addr[3]);
+        log_message(LOG_DEBUG, "Cache hit for [Domain: %s] with %d IP addresses", msg.question->QNAME, ip_count);
+        for (int i = 0; i < ip_count; i++) {
+            log_message(LOG_DEBUG, "IP %d: %d.%d.%d.%d", i+1, 
+                       ip_addrs[i][0], ip_addrs[i][1], ip_addrs[i][2], ip_addrs[i][3]);
+        }
     }
 
     /* 若cache未查到，则从host文件查找 */
     if (is_found == 0 || msg.question->QTYPE != DNS_TYPE_A) {
-
-        is_found = queryNode(msg.question->QNAME, ip_addr);
+        is_found = queryNode(msg.question->QNAME, ip_addrs, &ip_count);
         if(is_found && msg.question->QTYPE == DNS_TYPE_A){
-            log_message(LOG_DEBUG, "Found in local hosts file: [Domain: %s] -> [IP: %d.%d.%d.%d]", 
-                        msg.question->QNAME, ip_addr[0], ip_addr[1], ip_addr[2], ip_addr[3]);
+            log_message(LOG_DEBUG, "Found in local hosts file: [Domain: %s] with %d IP addresses", 
+                       msg.question->QNAME, ip_count);
+            for (int i = 0; i < ip_count; i++) {
+                log_message(LOG_DEBUG, "IP %d: %d.%d.%d.%d", i+1, 
+                           ip_addrs[i][0], ip_addrs[i][1], ip_addrs[i][2], ip_addrs[i][3]);
+            }
         }
 
-        if(is_found&&ip_addr[0]==0&&ip_addr[1]==0&&ip_addr[2]==0&&ip_addr[3]==0) {
+        // 检查第一个IP地址是否为0.0.0.0（拦截标志）
+        if(is_found && ip_count > 0 && 
+           ip_addrs[0][0] == 0 && ip_addrs[0][1] == 0 && 
+           ip_addrs[0][2] == 0 && ip_addrs[0][3] == 0) {
             log_message(LOG_INFO,"此网站已被拦截");
-
-        }else{
-        
+        } else {
             /*若不是ipv4报文则直接转发给远程服务器*/
             if(msg.question->QTYPE != DNS_TYPE_A) is_found = 0;
-
 
             /* 若未查到，则上交远程DNS服务器处理*/
             if (is_found == 0) {
@@ -230,11 +238,53 @@ void handleClientRequest(uint8_t* buffer, int msg_size, struct sockaddr_in* clie
         }
     }
 
+    // 如果找到了IP，则在msg中添加多个answer资源记录
+    if (is_found && ip_count > 0) {
+        dns_rr* prev = NULL;
+        
+        // 为每个IP地址创建一个独立的资源记录
+        for (int i = 0; i < ip_count; i++) {
+            dns_rr* answer = malloc(sizeof(dns_rr));
+            if (!answer) continue;
+            
+            // 设置基本信息
+            answer->name = strdup(msg.question->QNAME);
+            answer->type = DNS_TYPE_A;
+            answer->rrClass = DNS_CLASS_IN;
+            answer->ttl = 120; // 默认TTL值
+            answer->rdLength = 4; // 每个IPv4地址4字节
+            answer->next = NULL;
+            
+            // 设置IP地址
+            memcpy(answer->rdata.A_record.address, ip_addrs[i], 4);
+            
+            // 将新记录添加到链表中
+            if (prev) {
+                prev->next = answer;
+            } else {
+                msg.answer = answer; // 第一个记录
+            }
+            prev = answer;
+        }
+        
+        // 设置回答数量
+        msg.header->ANCOUNT = ip_count;
+    }
+
     uint8_t* end;
-    end = dnsstruct_to_str(&msg, buffer_new, ip_addr);
+    // 使用第一个IP地址作为参数传递给dnsstruct_to_str
+    end = dnsstruct_to_str(&msg, buffer_new, ip_addrs[0]);
+    
+    // 打印要发送的响应
     dns_Message new_msg;
-    log_message(LOG_INFO,"Send to the client [ID: %d], [Domain: %s] with [IP: %d.%d.%d.%d]",msg.header->ID, msg.question->QNAME, ip_addr[0], ip_addr[1], ip_addr[2], ip_addr[3]);
-    str_to_dnsstruct(&new_msg, buffer_new,buffer_new);
+    log_message(LOG_INFO,"Send to the client [ID: %d], [Domain: %s] with %d IP addresses",
+               msg.header->ID, msg.question->QNAME, ip_count);
+    for (int i = 0; i < ip_count; i++) {
+        log_message(LOG_INFO, "IP %d: %d.%d.%d.%d", i+1, 
+                   ip_addrs[i][0], ip_addrs[i][1], ip_addrs[i][2], ip_addrs[i][3]);
+    }
+    
+    str_to_dnsstruct(&new_msg, buffer_new, buffer_new);
     printQuestionAndAnswer(new_msg);
     log_message(LOG_INFO, "====================================================\n\n");
     int len = end - buffer_new;
@@ -243,7 +293,17 @@ void handleClientRequest(uint8_t* buffer, int msg_size, struct sockaddr_in* clie
     sendto(dnsSocket, buffer_new, len, 0, (struct sockaddr*)clientAddr, sizeof(*clientAddr));
 
     if (log_mode == 1) {
-        writeLog(msg.question->QNAME, ip_addr);
+        // 记录第一个IP地址到日志
+        writeLog(msg.question->QNAME, ip_addrs[0]);
+    }
+    
+    // 释放创建的answer资源
+    dns_rr* current = msg.answer;
+    while (current) {
+        dns_rr* temp = current;
+        current = current->next;
+        free(temp->name);
+        free(temp);
     }
 }
 
@@ -272,34 +332,62 @@ void handleServerResponse(uint8_t* buffer, int msg_size) {
         IDList[receivedID].expireTime = 0; // 清除ID映射
         sendto(dnsSocket, buffer, msg_size, 0, (struct sockaddr*)&originalClientAddress, sizeof(originalClientAddress));
         log_message(LOG_INFO, "Forwarded response to client [ID: %d], [Domain: %s]", originalID, msg.question->QNAME);
-        // 处理从远程DNS服务器返回的IP地址记录
-        uint8_t resolved_ip[4] = {0};
-        // 从回答部分提取IP地址
-        if (msg.answer && msg.answer->type == DNS_TYPE_A && msg.answer->rdLength == 4) {
-            memcpy(resolved_ip, msg.answer->rdata.A_record.address, 4);
+        
+        // 从DNS响应中提取所有A记录的IP地址
+        if (msg.question && msg.question->QNAME) {
+            uint8_t ip_addrs[MAX_IP_COUNT][4] = { {0} };
+            uint8_t ip_count = 0;
             
-            // 将IP地址和TTL添加到缓存中
-            if (msg.question && msg.question->QNAME) {
-                uint32_t ttl = msg.answer->ttl; // TTL已经在readBits中转换为主机字节序
-                cachePut(resolved_ip, msg.question->QNAME, ttl);
-                log_message(LOG_DEBUG, "Added to cache: %s -> %d.%d.%d.%d (TTL: %u seconds)", 
-                           msg.question->QNAME, 
-                           resolved_ip[0], resolved_ip[1], resolved_ip[2], resolved_ip[3],
-                           ttl);
+            // 遍历所有回答记录，收集A记录的IP地址
+            dns_rr* current = msg.answer;
+            while (current && ip_count < MAX_IP_COUNT) {
+                if (current->type == DNS_TYPE_A && current->rrClass == DNS_CLASS_IN && current->rdLength == 4) {
+                    // 复制IP地址
+                    memcpy(ip_addrs[ip_count], current->rdata.A_record.address, 4);
+                    ip_count++;
+                }
+                current = current->next;
             }
             
-            // 记录到日志中，使用实际的IP地址
-            if (log_mode == 1) {
-                writeLog(msg.question->QNAME, resolved_ip);
-            }
-        } else {
-            // 如果没有找到A记录或格式不正确，记录为未找到
-            if (log_mode == 1) {
-                writeLog(msg.question->QNAME, NULL);
+            // 如果找到了IP地址，添加到缓存
+            if (ip_count > 0) {
+                // 收集所有A记录的TTL值
+                uint32_t ttls[MAX_IP_COUNT] = {0};
+                
+                // 遍历回答记录再次，收集每个IP对应的TTL值
+                current = msg.answer;
+                int ttl_idx = 0;
+                while (current && ttl_idx < ip_count) {
+                    if (current->type == DNS_TYPE_A && current->rrClass == DNS_CLASS_IN && current->rdLength == 4) {
+                        ttls[ttl_idx] = current->ttl;
+                        ttl_idx++;
+                    }
+                    current = current->next;
+                }
+                
+                // 加入缓存，每个IP使用对应的TTL值
+                cachePut(ip_addrs, ttls, ip_count, msg.question->QNAME, 86400);
+                
+                log_message(LOG_DEBUG, "Added to cache: %s with %d IP addresses", 
+                           msg.question->QNAME, ip_count);
+                for (int i = 0; i < ip_count; i++) {
+                    log_message(LOG_DEBUG, "IP %d: %d.%d.%d.%d", i+1, 
+                               ip_addrs[i][0], ip_addrs[i][1], ip_addrs[i][2], ip_addrs[i][3]);
+                }
+                
+                // 记录到日志中，使用第一个IP地址
+                if (log_mode == 1) {
+                    writeLog(msg.question->QNAME, ip_addrs[0]);
+                }
+            } else {
+                // 如果没有找到A记录或格式不正确，记录为未找到
+                if (log_mode == 1) {
+                    writeLog(msg.question->QNAME, NULL);
+                }
             }
         }
     } else {
-        log_message(LOG_ERROR,"Warning: Invalid or expired ID mapping: %d", receivedID);
+        log_message(LOG_ERROR,"Warning: Invalid or expired ID mapping: %d\n\n", receivedID);
     }
     log_message(LOG_INFO, "====================================================\n\n");
 }

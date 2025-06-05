@@ -21,10 +21,19 @@ static unsigned long hashFunction(const char *str) {
 }
 
 // 检查指定的缓存节点是否已过期
+// 只要有一个IP地址未过期，该节点就被视为未过期
 int isExpired(lruNode* node) {
-    if (!node) return 1;
+    if (!node || node->ip_count == 0) return 1;
+    
     time_t current_time = time(NULL);
-    return (current_time - node->insert_time) >= node->ttl;
+    for (int i = 0; i < node->ip_count; i++) {
+        // 只要有一个IP未过期，就返回0表示未过期
+        if ((current_time - node->insert_time) < node->ttls[i]) {
+            return 0;
+        }
+    }
+    // 所有IP都已过期
+    return 1;
 }
 
 // 将节点从双向链表中解开
@@ -90,22 +99,21 @@ void cacheInit() {
     printf("LRU Cache initialized with capacity %d.\n", g_capacity);
 }
 
-// 查询操作 - 现在包含TTL检查
-int cacheGet(uint8_t *ipv4, char* domain) {
+// 查询操作 - 支持多个IP地址返回
+int cacheGet(uint8_t ipv4s[][4], uint8_t* ip_count, char* domain) {
     if (!g_hash_table) return 0; // 未初始化
 
     unsigned long index = hashFunction(domain) % HASH_TABLE_SIZE;
     hashNode* hash_node = g_hash_table[index];
-
+    
     while(hash_node) {
         if (strcmp(hash_node->lru_node_ptr->domain, domain) == 0) { // 命中
             lruNode* lru_node = hash_node->lru_node_ptr;
             
-            // 检查TTL是否过期
+            // 检查所有IP是否全部过期
             if (isExpired(lru_node)) {
-                // TTL已过期，从缓存中删除该条目
-                log_message(LOG_DEBUG,"Cache entry for domain '%s' has expired (TTL: %u seconds)", 
-                       domain, lru_node->ttl);
+                // 所有TTL已过期，从缓存中删除该条目
+                log_message(LOG_DEBUG,"Cache entry for domain '%s' has all IPs expired", domain);
                 _removeFromHashTable(domain);
                 _unlinkNode(lru_node);
                 free(lru_node);
@@ -113,8 +121,17 @@ int cacheGet(uint8_t *ipv4, char* domain) {
                 return 0; // 返回0表示未命中（已过期）
             }
             
-            // TTL未过期，返回数据
-            memcpy(ipv4, lru_node->IP, 4);
+            // 至少有一个IP未过期，返回未过期的IP地址
+            time_t current_time = time(NULL);
+            *ip_count = 0;
+            
+            for (int i = 0; i < lru_node->ip_count; i++) {
+                // 只返回未过期的IP地址
+                if ((current_time - lru_node->insert_time) < lru_node->ttls[i]) {
+                    memcpy(ipv4s[*ip_count], lru_node->IPs[i], 4);
+                    (*ip_count)++;
+                }
+            }
 
             // LRU核心：将命中节点移动到链表头部
             if (lru_node != g_head) { // 如果不是头部节点才需要移动
@@ -129,10 +146,16 @@ int cacheGet(uint8_t *ipv4, char* domain) {
     return 0; // 返回0表示未命中
 }
 
-// 插入操作 - 现在包含TTL参数
-void cachePut(uint8_t ipv4[4], char* domain, uint32_t ttl)
+// 插入操作 - 支持多个IP地址和TTL插入
+void cachePut(uint8_t ipv4s[][4], const uint32_t ttls[], uint8_t ip_count, char* domain, uint32_t default_ttl)
 {
     if (!g_hash_table) return; // 未初始化
+    
+    // 确保ip_count不超过最大限制
+    if (ip_count > MAX_IP_COUNT) {
+        ip_count = MAX_IP_COUNT;
+        log_message(LOG_DEBUG, "Warning: IP count exceeds maximum limit, truncated to %d", MAX_IP_COUNT);
+    }
 	
     unsigned long index = hashFunction(domain) % HASH_TABLE_SIZE;
     hashNode* hash_node = g_hash_table[index];
@@ -140,16 +163,20 @@ void cachePut(uint8_t ipv4[4], char* domain, uint32_t ttl)
     // 1. 检查域名是否已存在于缓存中
     while(hash_node) {
         if (strcmp(hash_node->lru_node_ptr->domain, domain) == 0) {
-            // 已存在：更新IP值、TTL和时间戳，并移动到链表头部
+            // 已存在：更新IP值、IP数量、每个IP的TTL和时间戳，并移动到链表头部
             lruNode* lru_node = hash_node->lru_node_ptr;
-            memcpy(lru_node->IP, ipv4, 4);
-            lru_node->ttl = ttl;
+            lru_node->ip_count = ip_count;
+            for (int i = 0; i < ip_count; i++) {
+                memcpy(lru_node->IPs[i], ipv4s[i], 4);
+                lru_node->ttls[i] = ttls ? ttls[i] : default_ttl;  // 为每个IP设置TTL
+            }
             lru_node->insert_time = time(NULL);
             if (lru_node != g_head) {
                 _unlinkNode(lru_node);
                 _addNodeToFront(lru_node);
             }
-            log_message(LOG_DEBUG,"Updated cache entry for domain '%s' with TTL %u seconds", domain, ttl);
+            log_message(LOG_DEBUG,"Updated cache entry for domain '%s' with %d IPs", 
+                       domain, ip_count);
             return;
         }
         hash_node = hash_node->next;
@@ -169,8 +196,14 @@ void cachePut(uint8_t ipv4[4], char* domain, uint32_t ttl)
     lruNode* new_lru_node = (lruNode*)malloc(sizeof(lruNode));
     strncpy(new_lru_node->domain, domain, MAX_DOMAIN_LEN -1);
     new_lru_node->domain[MAX_DOMAIN_LEN - 1] = '\0';
-    memcpy(new_lru_node->IP, ipv4, 4);
-    new_lru_node->ttl = ttl;
+    
+    // 复制所有的IP地址和TTL
+    new_lru_node->ip_count = ip_count;
+    for (int i = 0; i < ip_count; i++) {
+        memcpy(new_lru_node->IPs[i], ipv4s[i], 4);
+        new_lru_node->ttls[i] = ttls ? ttls[i] : default_ttl;  // 为每个IP设置TTL
+    }
+    
     new_lru_node->insert_time = time(NULL);
 
     // 插入到链表头部
@@ -183,7 +216,8 @@ void cachePut(uint8_t ipv4[4], char* domain, uint32_t ttl)
     g_hash_table[index] = new_hash_node;
 
     g_size++;
-    log_message(LOG_DEBUG ,"Added new cache entry for domain '%s' with TTL %u seconds", domain, ttl);
+    log_message(LOG_DEBUG ,"Added new cache entry for domain '%s' with %d IPs", 
+               domain, ip_count);
 }
 
 // 检查并清理所有过期的缓存条目
