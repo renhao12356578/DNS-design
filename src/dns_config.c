@@ -44,6 +44,7 @@ void printHelpInfo() {
     printf("|   -dd                        开启调试模式                                    |\n");
     printf("|   -s [server_address]        设置远程DNS服务器地址                           |\n");
     printf("|   -m [mode]                  设置程序的运行模式:0/1  非阻塞/阻塞             |\n");
+    printf("|   -p [path]                  设置hosts文件路径                               |\n");
     printf("+------------------------------------------------------------------------------+\n");
 }
 
